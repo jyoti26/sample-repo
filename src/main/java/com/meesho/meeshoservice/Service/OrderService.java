@@ -33,9 +33,7 @@ public class OrderService {
         orderRepo.save(order);
         sendSms(order.getOrderId());
         sendInvoice(order.getOrderId());
-
         return "createdSuccessfully";
-        //not handling
     }
 
     private void sendSms(String orderId){

@@ -75,8 +75,10 @@ public class NotificationService {
     @KafkaListener(containerFactory = "kafkaListenerContainerFactory",topics = KafkaConstants.SENDEMAIL)
     public void sendEmailConsumer(String message){
         Invoice invoice = mongoTemplate.findOne(new Query(Criteria.where("orderId").is(message)), Invoice.class, "Invoice");
+        boolean isInvoiceWithoutAttachment = redisTemplate.opsForHash().hasKey(invoice.getOrderId(),"sentInvocieNoAttachment");
+        boolean isInvoiceWithAttchment = redisTemplate.opsForHash().hasKey(invoice.getOrderId(),"sentInvoiceAttachment")
 
-        if(StringUtils.isEmpty(invoice.getAttachment()) && !redisTemplate.opsForHash().hasKey(invoice.getOrderId(),"sentInvocieNoAttachment")){
+        if(StringUtils.isEmpty(invoice.getAttachment()) && !isInvoiceWithoutAttachment && !isInvoiceWithAttchment){
             try{
                 log.info("sending email without attachment successfully for order {} to mailId {} ",message,invoice.getEmailId());
                 redisTemplate.opsForHash().put(message,"sentInvocieNoAttachment",true);

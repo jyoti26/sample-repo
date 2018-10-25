@@ -30,16 +30,15 @@ public class InvoiceService {
 
     int invoiceRetryCount;
 
-    @KafkaListener(containerFactory = "kafkaListenerContainerFactory",topics = KafkaConstants.CREATEINVOICE)
+    @KafkaListener(containerFactory = "kafkaListenerContainerFactory",groupId = "invoice",topics = KafkaConstants.CREATEINVOICE)
     public void createInvoiceConsumer(String message){
         if(redisTemplate.opsForHash().hasKey(message,"invoiceGenerated")){
             return;
         }
         createInvoice(message);
-        sendEmail(message);
     }
 
-    @KafkaListener(containerFactory = "kafkaListenerContainerFactory",groupId = "invoice",topics = KafkaConstants.CREATEINVOICE)
+    @KafkaListener(containerFactory = "kafkaListenerContainerFactory",groupId = "invoice",topics = KafkaConstants.RETRYINVOICE)
     public void retryInvoiceConsumer(String message){
         int retryCount = (Integer) redisTemplate.opsForHash().get(message,"retryInvoice");
         Boolean isInvoiceGenerated = (Boolean) redisTemplate.opsForHash().get(message,"invoiceGenerated");
@@ -70,6 +69,7 @@ public class InvoiceService {
             redisTemplate.opsForHash().put(message,"invoiceGenerated",false);
             retryLogic(message,"retryInvoice",KafkaConstants.RETRYINVOICE);
         }
+        sendEmail(message); //mulitple emails are handled in norification service
     }
 
     private void retryLogic(String message, String redisField, String kafkaConstant){
