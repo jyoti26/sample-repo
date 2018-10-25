@@ -2,11 +2,18 @@ package com.meesho.meeshoservice.Service;
 
 import com.meesho.meeshoservice.Constants.KafkaConstants;
 import com.meesho.meeshoservice.Models.Order;
+import com.meesho.meeshoservice.Models.QueueFailure;
+import com.meesho.meeshoservice.Repository.OrderRepo;
+import com.meesho.meeshoservice.util.Utility;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
+import org.springframework.util.concurrent.ListenableFuture;
+import org.springframework.util.concurrent.ListenableFutureCallback;
+
 
 @Service
 @Slf4j
@@ -16,11 +23,14 @@ public class OrderService {
     MongoTemplate mongoTemplate;
 
     @Autowired
-    KafkaTemplate<String,String> kafkaTemplate;
+    Utility utility;
+
+    @Autowired
+    OrderRepo orderRepo;
 
     public String createOrder(Order order){
         order.setOrderId("123455");
-        mongoTemplate.save(order,"Orders");
+        orderRepo.save(order);
         sendSms(order.getOrderId());
         sendInvoice(order.getOrderId());
 
@@ -29,22 +39,13 @@ public class OrderService {
     }
 
     private void sendSms(String orderId){
-        try {
-            kafkaTemplate.send("topicName", orderId);
-        }catch(Exception e){
-            log.info("sending sms failed");
-            //mongoTemplate.save(order,"FailedSms");
-        }
+        utility.uploadinKafka(KafkaConstants.SENDSMS,orderId);
     }
 
     private void sendInvoice(String orderId){
-        try {
-            kafkaTemplate.send(KafkaConstants.CREATEINVOICE, orderId);
-        }catch (Exception e){
-            log.info("sending invoice failed");
-            //TODO: fallback logic
-        }
+        utility.uploadinKafka(KafkaConstants.CREATEINVOICE, orderId);
     }
+
 
 
 }

@@ -4,11 +4,13 @@ package com.meesho.meeshoservice.Service;
 import com.meesho.meeshoservice.Constants.KafkaConstants;
 import com.meesho.meeshoservice.Models.Invoice;
 import com.meesho.meeshoservice.Models.Order;
+import com.meesho.meeshoservice.util.Utility;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -26,7 +28,8 @@ public class NotificationService {
     MongoTemplate mongoTemplate;
 
     @Autowired
-    KafkaTemplate<String,String> kafkaTemplate;
+    Utility utility;
+
 
     int smsRetryCount;
 
@@ -50,7 +53,7 @@ public class NotificationService {
         if(retryCount<=smsRetryCount && !isSMSsent){
             sendSms(message);
         }else{
-            kafkaTemplate.send("failedSMS",message);
+            utility.uploadinKafka("failedSMS",message);
         }
     }
 
@@ -59,6 +62,8 @@ public class NotificationService {
         Order order = mongoTemplate.findOne(new Query(Criteria.where("_id").is(orderId)), Order.class, "Orders");
         try{
             log.info("sending message for order {} to {}...", orderId, order.getPhoneNo());
+            order.setIsSMSsent(true);
+            mongoTemplate.save(order);
         }catch (Exception e){
             //if message sending fails:
             retryLogic(orderId,"retrySMS",KafkaConstants.RETRYSMS);
@@ -95,7 +100,7 @@ public class NotificationService {
             Invoice invoice = mongoTemplate.findOne(new Query(Criteria.where("_id").is(message)), Invoice.class, "Invoice");
             sendEmail(message, invoice);
         }else{
-            kafkaTemplate.send("failedSMS",message);
+            utility.uploadinKafka("failedSMS",message);
         }
     }
 
@@ -103,16 +108,23 @@ public class NotificationService {
         redisTemplate.opsForHash().put(orderId,"sentInvoiceAttachment",true); //locked
         try{
             log.info("sending email with attachment for order {} to email Id {}", invoice.getOrderId(),invoice.getEmailId());
+            findAndModifyOrder(orderId);
         }catch (Exception e){
             retryLogic(orderId,"sentInvoiceAttachment",KafkaConstants.RETRYEMAIL);
             redisTemplate.opsForHash().put(orderId,"sentInvoiceAttachment",false); //lock released
         }
     }
 
+    private void findAndModifyOrder(String orderId){
+        Query query = new Query(Criteria.where("_id").is(orderId));
+        Update update = new Update().set("isEmailSent",true);
+        mongoTemplate.findAndModify(query,update,Order.class);
+    }
+
 
     private void retryLogic(String message, String redisField, String kafkaConstant){
         redisTemplate.opsForHash().increment(message,redisField,1);
-        kafkaTemplate.send(kafkaConstant,message);
+        utility.uploadinKafka(kafkaConstant,message);
     }
 
 

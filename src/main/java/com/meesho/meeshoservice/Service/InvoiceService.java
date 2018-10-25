@@ -3,6 +3,7 @@ package com.meesho.meeshoservice.Service;
 import com.meesho.meeshoservice.Constants.KafkaConstants;
 import com.meesho.meeshoservice.Models.Invoice;
 import com.meesho.meeshoservice.Models.Order;
+import com.meesho.meeshoservice.util.Utility;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -17,14 +18,15 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class InvoiceService {
 
-    @Autowired
-    KafkaTemplate<String,String> kafkaTemplate;
 
     @Autowired
     RedisTemplate redisTemplate;
 
     @Autowired
     MongoTemplate mongoTemplate;
+
+    @Autowired
+    Utility utility;
 
     int invoiceRetryCount;
 
@@ -45,7 +47,7 @@ public class InvoiceService {
             createInvoice(message);
         }else{
             log.info("invoice sent is failed");
-            kafkaTemplate.send("failedInvoice",message);
+            utility.uploadinKafka("failedInvoice",message);
         }
 
     }
@@ -60,7 +62,9 @@ public class InvoiceService {
             invoice.setAttachment("abcd");
             invoice.setEmailId(order.getEmail());
             log.info("invoice created successfully for order {} ", message);
-            mongoTemplate.save(invoice, "Invoice");
+            mongoTemplate.save(invoice);
+            order.setInvoiceId(invoice.getInvoiceId());
+            mongoTemplate.save(order);
             //if in case invoice generation fails
         }catch (Exception e){
             redisTemplate.opsForHash().put(message,"invoiceGenerated",false);
@@ -70,13 +74,13 @@ public class InvoiceService {
 
     private void retryLogic(String message, String redisField, String kafkaConstant){
         redisTemplate.opsForHash().increment(message,redisField,1);
-        kafkaTemplate.send(kafkaConstant,message);
+        utility.uploadinKafka(kafkaConstant,message);
     }
 
 
 
     public void sendEmail(String message){
-        kafkaTemplate.send(KafkaConstants.SENDEMAIL,message);
+        utility.uploadinKafka(KafkaConstants.SENDEMAIL,message);
     }
 
 

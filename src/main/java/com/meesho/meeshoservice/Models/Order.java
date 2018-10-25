@@ -19,4 +19,8 @@ public class Order {
 
     private String email;
 
+    private Boolean isSMSsent;
+
+    private Boolean isEmailSent;
+
 }
